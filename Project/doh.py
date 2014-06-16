@@ -6,6 +6,9 @@
 # doh.go()
 #
 
+# TODO:
+# Remove anything from 1990
+# Remove anything with boro = 0
 
 #
 #%matplotlib inline
@@ -30,14 +33,17 @@ webextract_cnames = ['camis', 'dba','boro','building','street','zip','phone',
 
 def readWebextract() :
 
+    goforbroke = True
+
+    if goforbroke == False :
+        fname = r'\WebExtractTrunc2.txt'
+    else :
+        fname = r'\WebExtract.txt'
+
     # Read a truncated test file
-    return pd.read_csv( home_dir + r'\WebExtractTrunc2.txt',
-                        names = webextract_cnames, header=0, low_memory = False)
+    df = pd.read_csv( home_dir + fname, names = webextract_cnames, header=0, low_memory =False)
 
-    # Read the whole large file
-    #return pd.read_csv( home_dir + r'\WebExtract.txt', names = webextract_cnames,
-    #                    header=0, low_memory = False)
-
+    return df.ix[ df['inspdate'] >= "2009-12-31 00:00:00"]
 
 # ------------------------------------------------------------------------------
 def stringToDate(s) :
@@ -49,13 +55,27 @@ def stringToYear(s) :
 
     return s[0:4]
 
+def dropYears( df) :
+
+    years = ['2007','2008','2009']
+
+    for year in years :
+        try :
+            df.drop(year, axis=1, inplace=True)
+        except:
+            pass
+
+
+
 # ------------------------------------------------------------------------------
 def checkCAMIS( df) :
 
     #
     #  Find the number of unique CAMIS id.
     #
-
+    print "********************************"
+    print " Sanity checks on CAMIS ids"
+    print "********************************"
     # construct columns to delete
     cnames = copy.deepcopy(webextract_cnames)
     cnames.remove('camis')
@@ -88,42 +108,308 @@ def checkCAMIS( df) :
     else :
         print "Sorry, both sets do not match!"
 
+    print "\n\n"
 
-def breakdownCAMIS(df) :
+def statsRestaurantsLifeSpan(df) :
 
+    print "********************************"
+    print " Restaurant Life Spans"
+    print "********************************"
 
-    # construct columns to delete
+    #
+    # Report the number of inspections by boro and year
+    #
+
+    # Delete uninteresting columns
     cnames = copy.deepcopy(webextract_cnames)
     cnames.remove('camis')
+    cnames.remove('boro')
+    cnames.remove('inspdate')
+
+    # Drop a bunch of uninteresting columns
+    d_copy = df.drop(cnames,axis=1)
+
+    # Add a year column for each row
+    d_copy['year'] = d_copy['inspdate'].map(stringToYear)
+
+    # Remove inspdate column
+    d_copy.drop('inspdate', axis=1, inplace = True)
+
+    # Drop duplicate inspections dates
+    d_copy.drop_duplicates(inplace = True)
+
+    cam13 = set( d_copy.ix[d_copy['year'] == '2013']['camis'].values)
+    cam12 = set( d_copy.ix[d_copy['year'] == '2012']['camis'].values)
+    cam11 = set( d_copy.ix[d_copy['year'] == '2011']['camis'].values)
+    cam10 = set( d_copy.ix[d_copy['year'] == '2010']['camis'].values)
+
+    print "Restaurants count:"
+    print "2013:\t%i " % len(cam13)
+    print "2012:\t%i " % len(cam12)
+    print "2011:\t%i " % len(cam11)
+    print "2010:\t%i " % len(cam10)
+
+    total_by_union = len(cam13|cam12|cam11|cam10)
+    print "\nTotal restaurants in existence over 4 years = %i" % total_by_union
+
+    print "\n"
+    print "New restaurants openings:"
+    print "2013:\t%i " % len(cam13 - cam12)
+    print "2012:\t%i " % len(cam12 - cam11)
+    print "2011:\t%i " % len(cam11 - cam10)
+
+    print "\n"
+    print "Restaurants closings:"
+    print "2013:\t%i " % len(cam12 - cam13)
+    print "2012:\t%i " % len(cam11 - cam12)
+    print "2011:\t%i " % len(cam10 - cam11)
+
+    print "\n"
+    print "Restaurants lifespans:"
+    yr1 = len(cam13 - cam12) + \
+          len((cam12 - cam13) & (cam12 - cam11)) + \
+          len((cam11 - cam12) & (cam11 - cam10))
+
+
+    yr2 = len(cam13 & cam12 - cam11) + \
+          len(cam12 & cam11 - cam13 - cam10) + \
+          len(cam11 & cam10 - cam12)
+
+    yr3 = len(cam13 & cam12 & cam11 - cam10) + \
+          len(cam12 & cam11 & cam10 - cam13)
+
+    yr4 = len(cam13 & cam12 & cam11 & cam10)
+
+    print "1 year: \t%i " % yr1
+    print "2 years:\t%i " % yr2
+    print "3 years:\t%i " % yr3
+    print "4+ years:\t%i" % yr4
+
+    total_by_span = yr1 + yr2 + yr3 + yr4
+    print "check: sum of counts = %i " % total_by_span
+
+    deficit = total_by_union - total_by_span
+    print "missing inspections for %i restaurants. " % deficit
+
+    print "\n\n"
+
+def statsRestaurants(df) :
+
+    #
+    # Report the number of inspections by boro and year
+    #
+    print "********************************"
+    print " Inspections Statistics"
+    print "********************************"
+    # Delete uninteresting columns
+    cnames = copy.deepcopy(webextract_cnames)
+    cnames.remove('camis')
+    cnames.remove('boro')
     cnames.remove('inspdate')
 
     d_copy = df.drop(cnames,axis=1)
 
-    # Drop duplicate inspections
-    d_copy.drop_duplicates(inplace = True)
-
-    # Add a year colukmn for each row
+    # Add a year column for each row
     d_copy['year'] = d_copy['inspdate'].map(stringToYear)
 
     # Remove inspdate column and then remove even further duplicates
     d_copy.drop('inspdate', axis=1, inplace = True)
-    print d_copy
+
+    # Drop duplicate inspections dates
+    d_copy.drop_duplicates(inplace = True)
+
+    #print d_copy
+
+    pt = pd.pivot_table( d_copy, values='camis', rows=['boro'], cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+
+    #dropYears(pt)
+
+    print "Inspections by year and boro"
+    print pt
+
+    pt = pd.pivot_table( d_copy, values='camis', cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+
+    #dropYears(pt)
+
+    print "Inspections by year"
+    print pt
+
+    print "\n\n"
+
+def statsRestaurantsByCuisine(df) :
+
+    #
+    # Report the number of inspections by cuisine and year
+    #
+    print "********************************"
+    print " Cuisine Statistics"
+    print "********************************"
+    # Delete uninteresting columns
+    cnames = copy.deepcopy(webextract_cnames)
+    cnames.remove('camis')
+    cnames.remove('cuisine')
+    cnames.remove('inspdate')
+
+    d_copy = df.drop(cnames,axis=1)
+
+    # Drop duplicate inspections dates
+    d_copy.drop_duplicates(inplace = True)
+
+    # Add a year column for each row
+    d_copy['year'] = d_copy['inspdate'].map(stringToYear)
+
+    # Remove inspdate column and then remove even further duplicates
+    d_copy.drop('inspdate', axis=1, inplace = True)
+
+    # Drop duplicate inspections dates
+    d_copy.drop_duplicates(inplace = True)
+
+    #print d_copy
+
+    pt = pd.pivot_table( d_copy, values='camis', rows=['cuisine'], cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+
+    #dropYears(pt)
+
+    print "Inspections by year and cuisine"
+    print pt
+
+    print "\n\n"
+
+def statsRestaurantsClosures(df) :
+
+    #
+    # Report the number of inspections by cuisine and year
+    #
+    print "********************************"
+    print " Closure Statistics"
+    print "********************************"
+    # Delete uninteresting columns
+    cnames = copy.deepcopy(webextract_cnames)
+    cnames.remove('camis')
+    cnames.remove('action')
+    cnames.remove('boro')
+    cnames.remove('cuisine')
+    cnames.remove('inspdate')
+
+    d_copy = df.drop(cnames,axis=1)
+
+    # Drop duplicate inspections dates
+    #d_copy.drop_duplicates(inplace = True)
+
+    # Add a year column
+    d_copy['year'] = d_copy['inspdate'].map(stringToYear)
+
+    # Remove inspdate column
+    d_copy.drop('inspdate', axis=1, inplace = True)
+
+    # Pick out only actions that resulted in closure
+    d_copy = d_copy.ix[ np.logical_or(d_copy['action'] == 'C',d_copy['action'] == 'F')]
+
+    # Drop duplicates if any
+    d_copy.drop_duplicates(inplace = True)
+
+    pt = pd.pivot_table( d_copy, values='camis', cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+    #dropYears(pt)
+    print "Closures by year"
+    print pt
+
+    pt = pd.pivot_table( d_copy, values='camis', rows=['boro'], cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+
+    print "\n\n"
+    #dropYears(pt)
+    print "Closures by year and boro"
+    print pt
+
+    pt = pd.pivot_table( d_copy, values='camis', rows=['cuisine'], cols=['year'],
+                         fill_value = 0, aggfunc='count' )
+
+    print "\n\n"
+    #dropYears(pt)
+    print "Closures by year and cuisine"
+    print pt
+
+    print "\n\n"
+
+def statsCleanestCuisines(df) :
+
+    #
+    # Report the number of inspections by cuisine and year
+    #
+    print "********************************"
+    print " Cleanliness Statistics"
+    print "********************************"
+    # Delete uninteresting columns
+    cnames = copy.deepcopy(webextract_cnames)
+    cnames.remove('camis')
+    cnames.remove('boro')
+    cnames.remove('cuisine')
+    cnames.remove('score')
+    cnames.remove('inspdate')
+
+    d_copy = df.drop(cnames,axis=1)
+
+    #d_copy = df
+
+    # Add a year column
+    d_copy['year'] = d_copy['inspdate'].map(stringToYear)
+
+    # Remove inspdate column
+    #d_copy.drop('inspdate', axis=1, inplace = True)
+
+    # Remove any rows with missing data.  Since we only
+    # have four columns, only missing scores should be excluded.
+    #d_copy.dropna(inplace = True)
+
+    d_copy.drop_duplicates(inplace = True)
 
 
+    pt = pd.pivot_table( d_copy, values='score', cols=['boro'],
+                         fill_value = 0, aggfunc=np.average )
+    #dropYears(pt)
+    print "Scores by year"
+    print pt
+
+
+    pt = pd.pivot_table( d_copy, values='score', rows=['boro'],cols=['year'],
+                         fill_value = 0, aggfunc=np.average )
+    #dropYears(pt)
+    print "Scores by year and boro"
+    print pt
+
+    print "\n\n"
+
+
+def test(df) :
+
+    for k1, group in df.groupby(['camis']) :
+        print "==== ", group['dba'], "====="
+
+        group = group[['dba','inspdate','grade']].drop_duplicates()
+
+        for k2, group2 in group.groupby(['inspdate']) :
+            print group2['grade']
 
 def transitions(df) :
 
     prior_k1 = ""
     prior_k2 = ""
+    prior_company = ""
 
     for (k1, k2), group in df.groupby(['camis','inspdate']) :
         print "=============================="
-        print k1, k2
+        #print k1, k2
 
         rating_row = group[['dba','inspdate','action','score','grade']].drop_duplicates()
 
+
         if k1 != prior_k1 :
             print "First line!"
+            pass
         else :
             delta = (stringToDate(k2) - stringToDate(prior_k2)).days / 365.0
             print("Compute %s to %s = %f" % (prior_k2, k2, delta))
@@ -209,9 +495,21 @@ def go() :
     # Check IDS so assumptions hold
     checkCAMIS(df)
 
-    # CAMIS by borough by year
-    breakdownCAMIS(df)
+    # Inspections by borough by year
+    statsRestaurants(df)
+    statsRestaurantsLifeSpan(df)
 
-   # Do some work
-   # transitions(df)
+    # Inspections by cuisine by year
+    statsRestaurantsByCuisine(df)
+
+    # Closures
+    statsRestaurantsClosures(df)
+
+    # Cleaniless
+    statsCleanestCuisines(df)
+
+
+    # Do some work
+    #test(df)
+    #transitions(df)
 
