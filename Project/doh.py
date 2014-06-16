@@ -1,3 +1,13 @@
+
+# cd d:\dev\classes\datascience\doh
+# import imp
+# import doh
+# imp.reload(doh)
+# doh.go()
+#
+
+
+#
 #%matplotlib inline
 home_dir = r'D:\dev\classes\datascience\dohmh_restaurant-inspections_002'
 
@@ -10,20 +20,36 @@ import copy
 from pandas import DataFrame
 from IPython.display import Image
 
-webextract_cnames = ['camis', 'dba','boro','building','street','zip','phone','cuisine','inspdate',
-                'action', 'violcode','score','grade', 'gradedate','recorddate']
+from types import *
+from datetime import datetime
+
+# ------------------------------------------------------------------------------
+webextract_cnames = ['camis', 'dba','boro','building','street','zip','phone',
+                     'cuisine','inspdate', 'action', 'violcode','score','grade',
+                     'gradedate','recorddate']
 
 def readWebextract() :
 
     # Read a truncated test file
-    return pd.read_csv( home_dir + r'\WebExtractTrunc2.txt', names = webextract_cnames, header=0,
-                        low_memory = False)
+    return pd.read_csv( home_dir + r'\WebExtractTrunc2.txt',
+                        names = webextract_cnames, header=0, low_memory = False)
 
     # Read the whole large file
-    #return pd.read_csv( home_dir + r'\WebExtract.txt', names = webextract_cnames, header=0,
-    #                    low_memory = False)
+    #return pd.read_csv( home_dir + r'\WebExtract.txt', names = webextract_cnames,
+    #                    header=0, low_memory = False)
 
 
+# ------------------------------------------------------------------------------
+def stringToDate(s) :
+
+    return datetime.strptime(s[0:10], '%Y-%m-%d')
+
+# ------------------------------------------------------------------------------
+def stringToYear(s) :
+
+    return s[0:4]
+
+# ------------------------------------------------------------------------------
 def checkCAMIS( df) :
 
     #
@@ -62,18 +88,57 @@ def checkCAMIS( df) :
     else :
         print "Sorry, both sets do not match!"
 
-def foo(df) :
+
+def breakdownCAMIS(df) :
+
+
+    # construct columns to delete
+    cnames = copy.deepcopy(webextract_cnames)
+    cnames.remove('camis')
+    cnames.remove('inspdate')
+
+    d_copy = df.drop(cnames,axis=1)
+
+    # Drop duplicate inspections
+    d_copy.drop_duplicates(inplace = True)
+
+    # Add a year colukmn for each row
+    d_copy['year'] = d_copy['inspdate'].map(stringToYear)
+
+    # Remove inspdate column and then remove even further duplicates
+    d_copy.drop('inspdate', axis=1, inplace = True)
+    print d_copy
+
+
+
+def transitions(df) :
+
+    prior_k1 = ""
+    prior_k2 = ""
 
     for (k1, k2), group in df.groupby(['camis','inspdate']) :
         print "=============================="
         print k1, k2
-        rating_row = group[['camis','dba','inspdate','action','score','grade']].drop_duplicates()
+
+        rating_row = group[['dba','inspdate','action','score','grade']].drop_duplicates()
+
+        if k1 != prior_k1 :
+            print "First line!"
+        else :
+            delta = (stringToDate(k2) - stringToDate(prior_k2)).days / 365.0
+            print("Compute %s to %s = %f" % (prior_k2, k2, delta))
+
 
         print rating_row
         #print group.drop_duplicates()
         #for k3, group2 in group.groupby('')
 
+        prior_k1 = k1
+        prior_k2 = k2
 
+
+
+# ------------------------------------------------------------------------------
 def updateActionColumn( df) :
 
     #
@@ -130,14 +195,23 @@ def updateActionColumn( df) :
     #print "After:"
     #print df[['dba','inspdate','action']]
 
+
+
+
 def go() :
 
-
+    # Read data file
     df = readWebextract()
 
+    # Fixup actions so they are consistent
     updateActionColumn( df)
 
+    # Check IDS so assumptions hold
     checkCAMIS(df)
 
-    foo(df)
+    # CAMIS by borough by year
+    breakdownCAMIS(df)
+
+   # Do some work
+   # transitions(df)
 
